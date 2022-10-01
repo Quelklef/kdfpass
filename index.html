@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>KFD Pass</title>
+</head>
+<body>
+
+<div id="root">
+  <div id="inputs">
+    <input id="search-input" type="text" placeholder="search  --  [/] or [s]" />
+    <input id="maspass-input" type="password" placeholder="master password" />
+  </div>
+  <div id="entries"></div>
+  <div id="no-entries">Empty config!</div>
+</div>
+
+<style>
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+:root {
+  --font: monospace;
+  --color-splash: #c06;
+  --color-grey: lightgrey;
+}
+
+#root {
+  margin: 1em;
+  font-family: var(--font);
+}
+
+#inputs input {
+  font-family: var(--font);
+  width: 100%;
+  padding: .75em 2em;
+  border: 2px solid var(--color-grey);
+}
+
+#inputs input:focus {
+  border-color: var(--color-splash);
+  outline: none;
+}
+
+#inputs input:first-child {
+  border-radius: 3px 3px 0 0;
+}
+#inputs input:last-child {
+  border-radius: 0 0 3px 3px;
+}
+#inputs input:not(:first-child) {
+  margin-top: -2px;
+}
+#inputs input:focus {
+  position: relative;
+  z-index: 2;
+}
+
+#inputs {
+  margin-bottom: 1em;
+  box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.2);
+}
+
+#entries, #no-entries {
+  border: 1px solid var(--color-grey);
+  border-radius: 2px;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+#entries:empty {
+  display: none;
+}
+
+#entries:not(:empty) ~ #no-entries {
+  display: none;
+}
+
+#no-entries {
+  padding: 2em;
+  text-align: center;
+}
+
+.entry { 
+  width: 100%;
+  padding: 0.5em 2em;
+}
+
+.entry:not(:last-child) {
+  border-bottom: 1px solid var(--color-grey);
+}
+
+.entry.selected {
+  background-color: rgb(245, 245, 245);
+  border-left: 3px solid var(--color-splash);
+}
+
+</style>
+
+<script>
+
+function * enumerate(xs) {
+  let i = 0;
+  for (const x of xs) {
+    yield [i, x];
+    i++;
+  }
+}
+
+function mod(n, k) {
+  return ((n % k) + k) % k;
+}
+
+const shajs = require('sha.js');
+const fs = require('fs');
+const Fuse = require('fuse.js');
+const safeEval = require('safe-eval');
+
+function fuzzySort(items, key, query) {
+
+  // search
+  const fuse = new Fuse(items, {
+    keys: [key],
+    minMatchCharLength: 0,
+  });
+  let result = fuse.search(query);
+  result = result.map(el => el.item);
+
+  // re-add removed items
+  const keys = new Set(result.map(item => item[key]));
+  for (const item of items) {
+    if (!keys.has(item[key]))
+      result.push(item);
+  }
+
+  return result;
+
+}
+
+function main() {
+
+  const hashAlgorithms = {
+    sha256: function(s) {
+      return shajs('sha256').update(s).digest('hex');
+    },
+    sha512: function(s) {
+      return shajs('sha512').update(s).digest('hex');
+    },
+  };
+
+  const configLoc = getArg(hashAlgorithms);
+  const config = initConfig(configLoc, hashAlgorithms);
+
+  let state = {
+    entries: config.entries,
+    /*
+    entries : Array {
+      name : String,
+      algo : key in hashAlgorithms,
+      salt : String,
+      bump : Int,
+    }
+    */
+
+    hashAlgorithms,
+
+    // search query
+    search: '',
+
+    // search selection index
+    select: null,
+  };
+
+  firstRender(state);
+}
+
+function getArg(hashAlgorithms) {
+  const arg = process.env.KDFPASS_ARG;
+  if (!arg) {
+    console.log(`
+KDFPass
+
+Usage:
+
+  <kdfpass>
+    Show this help text
+
+  <kdfpass> <config-file-path>
+    Run KDFPass with the specified config
+    Supplied path MUST be absolute
+
+Config format:
+
+  {
+    entries : array of {
+      name : string, human-readable
+      salt : string, unique
+      algo :
+        one of ${Object.keys(hashAlgorithms).join(', ')}
+        optional, defaults to sha256
+      bump :
+        nonegative integer
+        optional, defaults to zero
+      post :
+        string denoting javascript function to post-process hash output
+        optional, defaults to 's => s.slice(0, 16)'
+    }
+  }
+`);
+    process.exit(1);
+  }
+  return arg;
+}
+
+function initConfig(configLoc, hashAlgorithms) {
+
+  let configStr;
+  try {
+    configStr = fs.readFileSync(configLoc);
+  } catch (e) {
+    throw "Unable to load config file. Either it is missing or the path is wrong.";
+  }
+
+  let config;
+  try {
+    config = JSON.parse(configStr);
+  } catch (e) {
+    throw "Config file is invalid JSON"
+  }
+
+  // Validate+fixup config
+
+  if (typeof config !== 'object' || config === null) {
+    throw "Config is non-object or null";
+  }
+
+  if (typeof config.entries !== 'object' || config.entries === null) {
+    throw "Expected top-level .entries key in config containing an object.";
+  }
+
+  for (const entry of config.entries) {
+    if (typeof entry.name !== 'string')
+      throw "All entries must have a string .name key";
+    if (entry.name.trim() === '')
+      throw "All entries must have a nonempty .name key";
+
+    if (typeof entry.algo === 'undefined')
+      entry.algo = 'sha512';
+    if (typeof entry.algo !== 'string')
+      throw `Entry '${entry.name}' has non-string value for key .algo`;
+    if (!Object.keys(hashAlgorithms).includes(entry.algo))
+      throw `Entry '${entry.name}' has unrecognized choice for key .algo`;
+
+    if (typeof entry.salt === 'undefined')
+      throw `Entry '${entry.name}' has no .salt key`;
+    if (typeof entry.salt !== 'string')
+      throw `Entry '${entry.name}' has non-string value for key .salt`;
+
+    if (typeof entry.bump === 'undefined')
+      entry.bump = 0;
+    if (typeof entry.bump !== 'number')
+      throw `Entry '${entry.name}' has non-number value for key .bump`;
+    if (entry.bump < 0 || !Number.isFinite(entry.bump) || (entry.bump | 0) !== entry.bump)
+      throw `Entry '${entry.name}' has non-natural-number value for key .bump`;
+
+    if (typeof entry.post === 'undefined')
+      entry.post = 's => s.slice(0, 16)';
+    if (typeof entry.post !== 'string')
+      throw `Entry '${entry.name}' has non-string value for key .post`;
+
+    try {
+      entry.post = safeEval(entry.post);
+    } catch (e) {
+      throw `Entry '${entry.name}' bad value for key .post`;
+    }
+  }
+
+  const salts = new Set(config.entries.map(entry => entry.salt));
+  if (salts.length !== entries.length)
+    throw `Duplicate salts are not allowed.`;
+
+  return config;
+
+}
+
+function firstRender(state) {
+
+  const $search = document.getElementById('search-input');
+  const $maspass = document.getElementById('maspass-input');
+
+  $search.addEventListener('input', () => {
+    state.search = $search.value;
+    state.select = null;
+    rerender(state);
+  });
+
+  document.addEventListener('keydown', ev => {
+    if (ev.target === $search && (ev.key === 'Enter' || ev.key === 'Escape')) {
+      $search.blur();
+      state.select = 0;
+      rerender(state);
+    }
+
+    if (ev.target === document.body && ev.key === 'Enter') {
+      $maspass.focus();
+    }
+    if (ev.target === document.body && (ev.key === 'Escape' || ev.key === 's' || ev.key === '/')) {
+      $search.focus();
+      ev.preventDefault();
+    }
+    if (ev.target === document.body && (ev.key === 'k' || ev.key === 'j')) {
+      state.select += (ev.key === 'k' ? -1 : +1);
+      state.select = mod(state.select, state.entries.length)
+      rerender(state);
+    }
+
+    if (ev.target === $maspass && ev.key === 'Escape') {
+      $maspass.blur();
+    }
+    if (ev.target === $maspass && ev.key === 'Enter') {
+      const maspass = $maspass.value;
+      const entry = state.entries[state.select];
+      const pass = state.hashAlgorithms[entry.algo](maspass + entry.salt + entry.bump);
+      nw.Clipboard.get().set(pass, 'text');
+      process.exit(0);
+    }
+  });
+
+  rerender(state);
+  $search.focus();
+
+}
+
+function rerender(state) {
+  const $container = document.getElementById('entries');
+  $container.innerHTML = '';
+  const entries = JSON.parse(JSON.stringify(state.entries));
+  const sorted = fuzzySort(entries, 'name', state.search);
+  for (const [i, entry] of enumerate(sorted)) {
+    const $el = document.createElement('div');
+    $el.classList.add('entry');
+    if (i === state.select)
+      $el.classList.add('selected');
+    $el.innerText = entry.name;
+    $container.append($el);
+  }
+}
+
+try {
+  main();
+} catch (e) {
+  console.warn(e);
+  process.exit(1);
+}
+
+</script>
+
+</body>
+</html>

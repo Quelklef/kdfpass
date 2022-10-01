@@ -1,0 +1,15 @@
+{
+  "name": "kdfpass",
+  "main": "index.html",
+  "chromium-args": "--enable-logging=stderr",
+  "window": {
+    "always_on_top": true,
+    "width": 800,
+    "height": 600
+  },
+  "dependencies": {
+    "fuse.js": "^6.6.2",
+    "safe-eval": "^0.4.1",
+    "sha.js": "^2.4.11"
+  }
+}
