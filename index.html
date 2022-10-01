@@ -300,9 +300,6 @@ function firstRender(state) {
     if (ev.target === $search && ev.key === 'Enter') {
       $maspass.focus();
     }
-    if (ev.target === $maspass && ev.key === 'Escape') {
-      $search.focus();
-    }
 
     if (ev.target === $maspass && ev.key === 'Escape') {
       $maspass.blur();
@@ -313,6 +310,10 @@ function firstRender(state) {
       if (!entry) return;
       const pass = entry.post(entry.algo(maspass + entry.salt + entry.bump));
       nw.Clipboard.get().set(pass, 'text');
+      nw.Window.get().hide();
+    }
+
+    if (ev.key === 'Escape') {
       nw.Window.get().hide();
     }
   });
