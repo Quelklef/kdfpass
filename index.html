@@ -7,7 +7,7 @@
 
 <div id="root">
   <div id="inputs">
-    <input id="search-input" type="text" placeholder="search  --  [/] or [s]" />
+    <input id="search-input" type="text" placeholder="search" />
     <input id="maspass-input" type="password" placeholder="master password" />
   </div>
   <div id="entries"></div>
@@ -31,8 +31,11 @@ body {
 }
 
 #root {
-  width: 100vw;
-  height: 100vh;
+  margin: 1em;
+  width: calc(100vw - 2em);
+  height: calc(100vh - 2em);
+  box-shadow: 0 0 12px -4px rgba(0, 0, 0, 0.3);
+
   font-family: var(--font);
   background-color: white;
   border: 2px solid var(--color-splash);
@@ -40,41 +43,32 @@ body {
   padding: 1em;
 }
 
+#inputs {
+  margin-bottom: 1em;
+  display: flex;
+  gap: 1em;
+}
 #inputs input {
   font-family: var(--font);
-  width: 100%;
-  padding: .75em 2em;
+  width: 25%;
+  padding: .75em 1.5em;
   border: 2px solid var(--color-grey);
+  border-radius: 3px;
+  margin: 0;
 }
-
 #inputs input:focus {
   border-color: var(--color-splash);
   outline: none;
+  width: 75%;
 }
-
-#inputs input:first-child {
-  border-radius: 3px 3px 0 0;
-}
-#inputs input:last-child {
-  border-radius: 0 0 3px 3px;
-}
-#inputs input:not(:first-child) {
-  margin-top: -2px;
-}
-#inputs input:focus {
-  position: relative;
-  z-index: 2;
-}
-
-#inputs {
-  margin-bottom: 1em;
-  box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.2);
+#inputs input:not(:focus) {
+  opacity: .5;
 }
 
 #entries, #no-entries {
   border: 1px solid var(--color-grey);
   border-radius: 2px;
-  max-height: 80vh;
+  max-height: 63vh;
   overflow-y: auto;
 }
 
@@ -94,15 +88,16 @@ body {
 .entry { 
   width: 100%;
   padding: 0.5em 2em;
+  border-left: 3px solid transparent;
 }
 
 .entry:not(:last-child) {
   border-bottom: 1px solid var(--color-grey);
 }
 
-.entry.selected {
+.entry:first-child {
   background-color: rgb(245, 245, 245);
-  border-left: 3px solid var(--color-splash);
+  border-left-color: var(--color-splash);
 }
 
 </style>
@@ -174,9 +169,6 @@ function main() {
 
     // search query
     search: '',
-
-    // search selection index
-    select: null,
   };
 
   firstRender(state);
@@ -242,8 +234,8 @@ function initConfig(configLoc, hashAlgorithms) {
     throw "Config is non-object or null";
   }
 
-  if (typeof config.entries !== 'object' || config.entries === null) {
-    throw "Expected top-level .entries key in config containing an object.";
+  if (!Array.isArray(config.entries)) {
+    throw "Expected top-level .entries key in config containing an array.";
   }
 
   for (const entry of config.entries) {
@@ -285,7 +277,7 @@ function initConfig(configLoc, hashAlgorithms) {
   }
 
   const salts = new Set(config.entries.map(entry => entry.salt));
-  if (salts.length !== entries.length)
+  if (salts.size !== config.entries.length)
     throw `Duplicate salts are not allowed.`;
 
   return config;
@@ -304,23 +296,11 @@ function firstRender(state) {
   });
 
   document.addEventListener('keydown', ev => {
-    if (ev.target === $search && (ev.key === 'Enter' || ev.key === 'Escape')) {
-      $search.blur();
-      state.select = 0;
-      rerender(state);
-    }
-
-    if (ev.target === document.body && ev.key === 'Enter') {
+    if (ev.target === $search && ev.key === 'Enter') {
       $maspass.focus();
     }
-    if (ev.target === document.body && (ev.key === 'Escape' || ev.key === 's' || ev.key === '/')) {
+    if (ev.target === $maspass && ev.key === 'Escape') {
       $search.focus();
-      ev.preventDefault();
-    }
-    if (ev.target === document.body && (ev.key === 'k' || ev.key === 'j')) {
-      state.select += (ev.key === 'k' ? -1 : +1);
-      state.select = mod(state.select, state.entries.length)
-      rerender(state);
     }
 
     if (ev.target === $maspass && ev.key === 'Escape') {
@@ -328,7 +308,8 @@ function firstRender(state) {
     }
     if (ev.target === $maspass && ev.key === 'Enter') {
       const maspass = $maspass.value;
-      const entry = state.entries[state.select];
+      const entry = state.entries[0];
+      if (!entry) return;
       const pass = entry.post(entry.algo(maspass + entry.salt + entry.bump));
       nw.Clipboard.get().set(pass, 'text');
 
