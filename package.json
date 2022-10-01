@@ -6,7 +6,11 @@
     "id": "kdfpass",
     "title": "KDF Pass",
     "always_on_top": true,
-    "frame": false
+    "transparent": true,
+    "frame": false,
+    "width": 800,
+    "height": 300,
+    "resizable": false
   },
   "dependencies": {
     "fuse.js": "^6.6.2",

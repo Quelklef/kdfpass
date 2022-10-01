@@ -31,8 +31,12 @@ body {
 }
 
 #root {
-  margin: 1em;
+  width: 100vw;
+  height: 100vh;
   font-family: var(--font);
+  background-color: white;
+  border-radius: 5px;
+  padding: 1em;
 }
 
 #inputs input {
@@ -333,6 +337,7 @@ function firstRender(state) {
     }
   });
 
+  nw.Window.get().setPosition('center');
   rerender(state);
   $search.focus();
 
