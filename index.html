@@ -50,7 +50,7 @@ body {
 }
 #inputs input {
   font-family: var(--font);
-  width: 25%;
+  width: 50%;
   padding: .75em 1.5em;
   border: 2px solid var(--color-grey);
   border-radius: 3px;
@@ -120,6 +120,7 @@ const shajs = require('sha.js');
 const fs = require('fs');
 const Fuse = require('fuse.js');
 const safeEval = require('safe-eval');
+const child_process = require('child_process');
 
 function fuzzySort(items, key, query) {
 
@@ -312,16 +313,25 @@ function firstRender(state) {
       if (!entry) return;
       const pass = entry.post(entry.algo(maspass + entry.salt + entry.bump));
       nw.Clipboard.get().set(pass, 'text');
-
-      // WANT TO FIX: this is a giant hack lmfao
       nw.Window.get().hide();
-      setTimeout(() => process.exit(0), 5 * 1000);
     }
   });
 
-  nw.Window.get().setPosition('center');
-  rerender(state);
-  $search.focus();
+  reshow();
+  function reshow() {
+    $maspass.value = '';
+    $search.value = '';
+    state.search = '';
+    rerender(state);
+
+    nw.Window.get().show()
+    nw.Window.get().setPosition('center');
+    nw.Window.get().focus();
+    $search.focus();
+  }
+
+  // After the app is hidden, trying to re-open it will fire this event
+  nw.App.on('open', reshow);
 
 }
 
