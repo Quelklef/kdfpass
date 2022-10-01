@@ -167,8 +167,6 @@ function main() {
     }
     */
 
-    hashAlgorithms,
-
     // search query
     search: '',
 
@@ -255,6 +253,7 @@ function initConfig(configLoc, hashAlgorithms) {
       throw `Entry '${entry.name}' has non-string value for key .algo`;
     if (!Object.keys(hashAlgorithms).includes(entry.algo))
       throw `Entry '${entry.name}' has unrecognized choice for key .algo`;
+    entry.algo = hashAlgorithms[entry.algo];
 
     if (typeof entry.salt === 'undefined')
       throw `Entry '${entry.name}' has no .salt key`;
@@ -325,9 +324,12 @@ function firstRender(state) {
     if (ev.target === $maspass && ev.key === 'Enter') {
       const maspass = $maspass.value;
       const entry = state.entries[state.select];
-      const pass = state.hashAlgorithms[entry.algo](maspass + entry.salt + entry.bump);
+      const pass = entry.post(entry.algo(maspass + entry.salt + entry.bump));
       nw.Clipboard.get().set(pass, 'text');
-      process.exit(0);
+
+      // WANT TO FIX: this is a giant hack lmfao
+      nw.Window.get().hide();
+      setTimeout(() => process.exit(0), 5 * 1000);
     }
   });
 

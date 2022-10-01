@@ -3,9 +3,10 @@
   "main": "index.html",
   "chromium-args": "--enable-logging=stderr",
   "window": {
+    "id": "kdfpass",
+    "title": "KDF Pass",
     "always_on_top": true,
-    "width": 800,
-    "height": 600
+    "frame": false
   },
   "dependencies": {
     "fuse.js": "^6.6.2",
