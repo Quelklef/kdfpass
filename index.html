@@ -168,6 +168,8 @@ function main() {
     }
     */
 
+    hashAlgorithms,
+
     // search query
     search: '',
   };
@@ -251,7 +253,6 @@ function initConfig(configLoc, hashAlgorithms) {
       throw `Entry '${entry.name}' has non-string value for key .algo`;
     if (!Object.keys(hashAlgorithms).includes(entry.algo))
       throw `Entry '${entry.name}' has unrecognized choice for key .algo`;
-    entry.algo = hashAlgorithms[entry.algo];
 
     if (typeof entry.salt === 'undefined')
       throw `Entry '${entry.name}' has no .salt key`;
@@ -271,7 +272,7 @@ function initConfig(configLoc, hashAlgorithms) {
       throw `Entry '${entry.name}' has non-string value for key .post`;
 
     try {
-      entry.post = safeEval(entry.post);
+      safeEval(entry.post);
     } catch (e) {
       throw `Entry '${entry.name}' bad value for key .post`;
     }
@@ -306,9 +307,11 @@ function firstRender(state) {
     }
     if (ev.target === $maspass && ev.key === 'Enter') {
       const maspass = $maspass.value;
-      const entry = state.entries[0];
+      const entries = JSON.parse(JSON.stringify(state.entries));
+      const sorted = fuzzySort(entries, 'name', state.search);
+      const entry = sorted[0];
       if (!entry) return;
-      const pass = entry.post(entry.algo(maspass + entry.salt + entry.bump));
+      const pass = safeEval(entry.post)(state.hashAlgorithms[entry.algo](maspass + entry.salt + entry.bump));
       nw.Clipboard.get().set(pass, 'text');
       nw.Window.get().hide();
     }
